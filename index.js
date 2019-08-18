@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+const fs = require("fs");
+const path = require("path");
 
 
 const isFile = (p) => {
@@ -18,8 +18,7 @@ const isDirectory = (p) => {
     }
 };
 
-
-export default function alias({ entry = {}, extensions = [".js"] }) {
+function alias({ entry = {}, extensions = [".js"] }) {
 
     const entryKeys = Object.keys(entry);
 
@@ -61,3 +60,6 @@ export default function alias({ entry = {}, extensions = [".js"] }) {
         },
     };
 }
+
+
+module.exports = alias;
