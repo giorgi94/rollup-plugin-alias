@@ -1,103 +1,63 @@
 import fs from "fs";
-import { platform } from "os";
-import path, { posix } from "path";
+import path from "path";
 
-import slash from "slash";
 
-const VOLUME = /^([A-Z]:)/;
-const IS_WINDOWS = platform() === "win32";
-
-// Helper functions
-const noop = () => null;
-const matches = (key, importee) => {
-    if (importee.length < key.length) {
-        return false;
-    }
-    if (importee === key) {
-        return true;
-    }
-    const importeeStartsWithKey = (importee.indexOf(key) === 0);
-    const importeeHasSlashAfterKey = (importee.substring(key.length)[0] === "/");
-    return importeeStartsWithKey && importeeHasSlashAfterKey;
-};
-const endsWith = (needle, haystack) => haystack.slice(-needle.length) === needle;
-const isFilePath = id => /^\.?\//.test(id);
-const exists = (uri) => {
+const isFile = (p) => {
     try {
-        return fs.statSync(uri).isFile();
+        return fs.statSync(p).isFile();
     } catch (e) {
         return false;
     }
 };
 
-const normalizeId = (id) => {
-    if ((IS_WINDOWS && typeof id === "string") || VOLUME.test(id)) {
-        return slash(id.replace(VOLUME, ""));
+const isDirectory = (p) => {
+    try {
+        return fs.statSync(p).isDirectory();
+    } catch (e) {
+        return false;
     }
-
-    return id;
 };
 
-export default function alias(options = {}) {
-    const hasResolve = Array.isArray(options.resolve);
-    const resolve = hasResolve ? options.resolve : [".js"];
-    const aliasKeys = hasResolve
-        ? Object.keys(options).filter(k => k !== "resolve") : Object.keys(options);
 
-    // No aliases?
-    if (!aliasKeys.length) {
+export default function alias({ entry = {}, extensions = [".js"] }) {
+
+    const entryKeys = Object.keys(entry);
+
+    if (!entryKeys.length) {
         return {
-            resolveId: noop,
+            resolveId: () => null,
         };
     }
 
     return {
-        resolveId(importee, importer) {
-            const importeeId = normalizeId(importee);
-            const importerId = normalizeId(importer);
+        name: "alias",
+        resolveId(source) {
 
-            // First match is supposed to be the correct one
-            const toReplace = aliasKeys.find(key => matches(key, importeeId));
+            const key = entryKeys.find(key => source.startsWith(key));
 
-            if (!toReplace || !importerId) {
+            if (!key || !source) {
                 return null;
             }
 
-            const entry = options[toReplace];
+            source = source.replace(key, entry[key]);
 
-            let updatedId = normalizeId(importeeId.replace(toReplace, entry));
+            if (isFile(source)) {
+                return source;
+            }
 
-            if (isFilePath(updatedId)) {
-                const directory = posix.dirname(importerId);
+            if (isDirectory(source)) {
+                return path.join(source, "index.js");
+            }
 
-                // Resolve file names
-                const filePath = posix.resolve(directory, updatedId);
-                const match = resolve.map(ext => (endsWith(ext, filePath) ? filePath : `${filePath}${ext}`))
-                    .find(exists);
+            const filepaths = extensions.map(ext => source + ext);
 
-                if (match) {
-                    updatedId = match;
-                    // To keep the previous behaviour we simply return the file path
-                    // with extension
-                } else if (endsWith(".js", filePath)) {
-                    updatedId = filePath;
-                }
-                else if (fs.statSync(filePath).isDirectory()) {
-                    updatedId = path.join(filePath, "index.js");
-                }
-                else {
-                    updatedId = filePath + ".js";
+            for (let fpath of filepaths) {
+                if (isFile(fpath)) {
+                    return fpath;
                 }
             }
 
-            // if alias is windows absoulate path return resolved path or
-            // rollup on windows will throw:
-            //  [TypeError: Cannot read property 'specifier' of undefined]
-            if (VOLUME.test(entry)) {
-                return path.resolve(updatedId);
-            }
-
-            return updatedId;
+            return source;
         },
     };
 }
