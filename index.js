@@ -32,7 +32,7 @@ function alias({ entry = {}, extensions = [".js"] }) {
         name: "alias",
         resolveId(source) {
 
-            const key = entryKeys.find(key => source.startsWith(key));
+            const key = entryKeys.find(key => source.startsWith(key + '/'));
 
             if (!key || !source) {
                 return null;
